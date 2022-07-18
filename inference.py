@@ -4,20 +4,66 @@ import argparse
 from typing import OrderedDict
 from loguru import logger
 sys.path.append(os.getcwd())
-from core.dataset.utils import read_img_wo_resize, ImageAugmentation
-from core.utils import nms, putText
 import onnxruntime
 import cv2
 import glob
+import json
 from tqdm import tqdm
 import time
 import numpy as np
-from utils.config import json_to_dict
 from attrdict import AttrDict
-import torch
+import torch, torchvision
+import albumentations as A
+from PIL import ImageFont, ImageDraw, Image
+
 detector_list = ['SSD', 'RetinaNet', 'YOLOv5', "SSD4Point"]
 classifier_list = ['Classifier']
 ocr_list        = ['BaseLpr']
+
+def json_to_dict(json_path):
+    with open(json_path) as json_file:
+        return json.load(json_file)
+
+
+def putText(img, text, org, font_path, color=(0, 0, 255), font_size=20):
+    """
+    Display text on images
+    :param img: Input img, read through cv2
+    :param text: 표시할 텍스트 
+    :param org: The coordinates of the upper left corner of the text
+    :param font_path: font path
+    :param color: font color, (B,G,R)
+    :return:
+    """
+    img_pil = Image.fromarray(img)
+    draw = ImageDraw.Draw(img_pil)
+    b, g, r = color
+    a = 0
+    draw.text(org, text, stroke_width=2, font=ImageFont.truetype(font_path, font_size), fill=(b, g, r, a))
+    img = np.array(img_pil)
+    return img
+
+
+def nms(results, detections_per_img, nms_thresh, min_score=0.05):
+    detections = []
+    for batch_res in  results:
+        batch_boxes, batch_scores, batch_labels = batch_res
+        for image_boxes, image_scores, image_labels in zip(batch_boxes, batch_scores, batch_labels):
+            if image_boxes[0].shape[0] == 8:
+                image_boxes_2point = image_boxes[:,[0,1,4,5]]
+                index = image_scores > min_score
+                keep = torchvision.ops.batched_nms(image_boxes_2point[index], image_scores[index], image_labels[index], nms_thresh)
+                keep = keep[:detections_per_img]
+            else:
+                index = image_scores > min_score
+                keep = torchvision.ops.batched_nms(image_boxes[index], image_scores[index], image_labels[index], nms_thresh)
+                keep = keep[:detections_per_img]
+            detections.append({
+                        'boxes': image_boxes[index][keep],
+                        'scores': image_scores[index][keep],
+                        'labels': image_labels[index][keep],
+                    })
+    return detections
 
 baseLpr_dict = {"rk":"가", "sk":"나", "ek":"다", "fk":"라", "ak":"마", "qk":"바", "tk":"사", "dk":"아", "wk":"자",
                     "rj":"거", "sj":"너", "ej":"더", "fj":"러", "aj":"머", "qj":"버", "tj":"서", "dj":"어", "wj":"저", 
@@ -79,10 +125,13 @@ def decode( text_index, length):
         index += l
     return texts
 
-def pre_process(img,  img_size, transform):
+def pre_process(img,  img_size):
 
     img = cv2.resize(img, (img_size,img_size), interpolation=cv2.INTER_LINEAR)
-    img, _ = transform.transform(img)
+
+    augmentation = A.Compose([A.Normalize(mean=(0, 0, 0), std=(1, 1, 1), max_pixel_value=255, always_apply=True)], bbox_params=A.BboxParams(format='pascal_voc'))
+    transformed = augmentation(image=img, bboxes=np.array([]))
+    img = transformed["image"]
     img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, HWC to CHW
     img = np.ascontiguousarray(img)
 
@@ -110,7 +159,7 @@ def lpr_pre_process(ori_img, bbox, img_shape):
     img_crop = (img_crop - 0.5) / 0.5
     return img_crop
 
-def inference_with_ort(resized_img, ori_img, model_ort_session, sub_ort_session1, sub_ort_session2, nms_thresh, detections_per_img, min_score, secondary_img_size1, secondary_img_size2, transform):
+def inference_with_ort(resized_img, ori_img, model_ort_session, sub_ort_session1, sub_ort_session2, nms_thresh, detections_per_img, min_score, secondary_img_size1, secondary_img_size2):
     h0, w0 = ori_img.shape[:2]  # orig hw  
     if secondary_img_size1 != -1:
         (h, w) = secondary_img_size1
@@ -144,7 +193,7 @@ def inference_with_ort(resized_img, ori_img, model_ort_session, sub_ort_session1
                 img_crop = ori_img[max(0, int(bbox[1])):int(bbox[5])+1, max(0, int(bbox[0])):int(bbox[4])+1]
                 
                 try:
-                    img_crop = pre_process(img_crop, secondary_img_size2, transform)
+                    img_crop = pre_process(img_crop, secondary_img_size2)
                 except:
                     print("wait")
                 
@@ -153,7 +202,7 @@ def inference_with_ort(resized_img, ori_img, model_ort_session, sub_ort_session1
                 car_idx = np.argmax(res)
     return car_idx, preds_str
 
-def video_run(video_file_path, primary_img_size, secondary_img_size1, secondary_img_size2, transform,
+def video_run(video_file_path, primary_img_size, secondary_img_size1, secondary_img_size2, 
                 model_ort_session, sub_ort_session1, sub_ort_session2, nms_thresh, detections_per_img, min_score):
     videoCapture = cv2.VideoCapture(video_file_path)
     video_name = video_file_path.strip().split('/')[-1].split('.')[0]
@@ -172,10 +221,10 @@ def video_run(video_file_path, primary_img_size, secondary_img_size1, secondary_
         img_h, img_w, _ = image.shape
         # skip frames
         if cur_num % 1 == 0:
-            resized_img = pre_process(image_copy, primary_img_size, transform)
+            resized_img = pre_process(image_copy, primary_img_size)
             
             car_idx, preds_str = inference_with_ort(resized_img, image_copy, model_ort_session, sub_ort_session1, sub_ort_session2,
-                    nms_thresh, detections_per_img, min_score, secondary_img_size1, secondary_img_size2, transform)
+                    nms_thresh, detections_per_img, min_score, secondary_img_size1, secondary_img_size2)
            
             if preds_str != '':
                 if len(preds_str[0]) < 7 :
@@ -225,7 +274,6 @@ def main(cfg):
     primary_img_size = cfg.data.get('primary_img_size', -1)
     secondary_img_size1 = cfg.data.get('secondary_img_size1', -1)
     secondary_img_size2 = cfg.data.get('secondary_img_size2', -1)
-    transform = ImageAugmentation(cfg.data.augmentation, mode=cfg.data.mode)
     nms_thresh = cfg.get('nms_thresh', 0.5)
     detections_per_img = cfg.get('detections_per_img', 100)
     min_score = cfg.get('min_score', 0.01)
@@ -236,10 +284,10 @@ def main(cfg):
         inference_time = 0
         for path in input_list:
             begin = time.time()
-            ori_img, _, _ = read_img_wo_resize(path)
-            resized_img = pre_process(ori_img, primary_img_size, transform)
+            ori_img = cv2.imread(path)
+            resized_img = pre_process(ori_img, primary_img_size)
             car_idx, preds_str = inference_with_ort(resized_img, ori_img, model_ort_session, sub_ort_session1, sub_ort_session2,
-                    nms_thresh, detections_per_img, min_score, secondary_img_size1, secondary_img_size2, transform)
+                    nms_thresh, detections_per_img, min_score, secondary_img_size1, secondary_img_size2)
             inference_time += time.time() - begin
             if car_idx != 'unknown' and preds_str != '':
                 print("car label: {}\tlpr: {}\t{}".format(car_maker[car_idx], preds_str, path.split('/')[-1]))
@@ -251,7 +299,7 @@ def main(cfg):
         l_v = glob.glob(os.path.join(input_path,  "*.mp4"))  
         for v in tqdm(l_v):
             begin = time.time()
-            cur_num = video_run(v, primary_img_size, secondary_img_size1, secondary_img_size2, transform, 
+            cur_num = video_run(v, primary_img_size, secondary_img_size1, secondary_img_size2, 
                 model_ort_session, sub_ort_session1, sub_ort_session2, nms_thresh, detections_per_img, min_score)
             end = time.time()
             print('totol_time:', str(end-begin))
