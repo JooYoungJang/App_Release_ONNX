@@ -47,7 +47,7 @@ def make_parser():
 
 def get_batch(image_l):
     return np.stack(image_l, 0)
-
+    
 def pad_and_reshape(labels, ratio, pad, shape):
         (h, w) = shape        
         if len(labels) > 0:
@@ -185,14 +185,14 @@ def video_run(video_file_path, primary_img_size, secondary_img_size1, secondary_
                     continue
                 if type(car_idx) == np.int64:
                     print("car label: {}\tlpr: {}".format(car_maker[car_idx], preds_str))
-                    image = putText(image, car_maker[car_idx], (img_w-500, img_h-100),
-                                    '/opt/conda/lib/python3.7/site-packages/cv2/qt/fonts/DejaVuSans-Bold.ttf', (0, 0, 255), 100)
+                    image = putText(image, car_maker[car_idx], (img_w-1500, img_h-100),
+                                    'NanumSquareB.ttf', (0, 255, 0), 100)
                 else:
                     print(print("car label: {}\tlpr: {}".format(car_idx, preds_str)))
-                    image = putText(image, car_idx, (img_w-500, img_h-100),
-                                    '/opt/conda/lib/python3.7/site-packages/cv2/qt/fonts/DejaVuSans-Bold.ttf', (0, 0, 255), 100)
-                image = putText(image, preds_str[0], (img_w-400, img_h-200),
-                                    '/opt/conda/lib/python3.7/site-packages/cv2/qt/fonts/DejaVuSans-Bold.ttf', (0, 0, 255), 100)
+                    image = putText(image, car_idx, (img_w-1500, img_h-100),
+                                    'NanumSquareB.ttf', (0, 255, 0), 100)
+                image = putText(image, preds_str[0], (img_w-800, img_h-200),
+                                    'NanumSquareB.ttf', (0, 0, 255), 100)
 
         
     
@@ -233,14 +233,18 @@ def main(cfg):
     if cfg.inference_method == 'Image':
         logger.info("Inference with Image..")
         input_list = glob.glob(os.path.join(input_path, '*.jpg'))      
-        
+        inference_time = 0
         for path in input_list:
+            begin = time.time()
             ori_img, _, _ = read_img_wo_resize(path)
             resized_img = pre_process(ori_img, primary_img_size, transform)
             car_idx, preds_str = inference_with_ort(resized_img, ori_img, model_ort_session, sub_ort_session1, sub_ort_session2,
                     nms_thresh, detections_per_img, min_score, secondary_img_size1, secondary_img_size2, transform)
-            if car_idx != None and preds_str != '':
+            inference_time += time.time() - begin
+            if car_idx != 'unknown' and preds_str != '':
                 print("car label: {}\tlpr: {}\t{}".format(car_maker[car_idx], preds_str, path.split('/')[-1]))
+
+        print('FPS:', str(int(len(input_list)/(inference_time))))
     
     elif cfg.inference_method == 'Video':
         logger.info("Inference with Video..")
