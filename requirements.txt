@@ -1,0 +1,7 @@
+loguru
+opencv-python
+tqdm
+attrdict
+torch
+torchvision
+albumentations
