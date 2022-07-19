@@ -326,7 +326,7 @@ def main(cfg):
             if (cv2.waitKey(5) != -1):
                 break
             i += 1
-       print('FPS:', str(int(i/(end-begin))))
+        print('FPS:', str(int(i/(end-begin))))
 if __name__ == "__main__":
 
     args = make_parser().parse_args()
