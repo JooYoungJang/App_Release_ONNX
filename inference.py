@@ -325,7 +325,8 @@ def main(cfg):
             cv2.imshow("webcam",img)
             if (cv2.waitKey(5) != -1):
                 break
-       print('FPS:', str(int(cur_num/(end-begin))))
+            i += 1
+       print('FPS:', str(int(i/(end-begin))))
 if __name__ == "__main__":
 
     args = make_parser().parse_args()
