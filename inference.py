@@ -225,7 +225,8 @@ def video_run(video_file_path, primary_img_size, secondary_img_size1, secondary_
             
             car_idx, preds_str = inference_with_ort(resized_img, image_copy, model_ort_session, sub_ort_session1, sub_ort_session2,
                     nms_thresh, detections_per_img, min_score, secondary_img_size1, secondary_img_size2)
-           
+            
+            
             if preds_str != '':
                 if len(preds_str[0]) < 7 :
                     video.write(image) 
@@ -307,9 +308,10 @@ def main(cfg):
             print('FPS:', str(int(cur_num/(end-begin))))
     elif cfg.inference_method == 'Stream':
         i = 0
+        img_w, img_h = 640, 480
         cap = cv2.VideoCapture(0)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH,640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT,480)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH,img_w)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT,img_h)
         cap.set(cv2.CAP_PROP_FPS, 20)
         inference_time = 0
         while True:
@@ -319,10 +321,23 @@ def main(cfg):
             car_idx, preds_str = inference_with_ort(resized_img, ori_img, model_ort_session, sub_ort_session1, sub_ort_session2,
                     nms_thresh, detections_per_img, min_score, secondary_img_size1, secondary_img_size2)
             inference_time += time.time() - begin
-            if car_idx != 'unknown' and preds_str != '':
-                print("car label: {}\tlpr: {}\t{}".format(car_maker[car_idx], preds_str, path.split('/')[-1]))
-
-            cv2.imshow("webcam",img)
+            if preds_str != '':
+                if len(preds_str[0]) < 7 :
+                    video.write(image) 
+                    success, image = videoCapture.read()
+                    cur_num = cur_num + 1
+                    continue
+                if type(car_idx) == np.int64:
+                    print("car label: {}\tlpr: {}".format(car_maker[car_idx], preds_str))
+                    ori_img = putText(ori_img, car_maker[car_idx], (img_w-1500, img_h-100),
+                                    'NanumSquareB.ttf', (0, 255, 0), 100)
+                else:
+                    print(print("car label: {}\tlpr: {}".format(car_idx, preds_str)))
+                    ori_img = putText(ori_img, car_idx, (img_w-1500, img_h-100),
+                                    'NanumSquareB.ttf', (0, 255, 0), 100)
+                ori_img = putText(ori_img, preds_str[0], (img_w-800, img_h-200),
+                                    'NanumSquareB.ttf', (0, 0, 255), 100)
+            cv2.imshow("webcam",ori_img)
             if (cv2.waitKey(5) != -1):
                 break
             i += 1
