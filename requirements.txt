@@ -1,7 +1,9 @@
 loguru
 opencv-python
+opencv-contrib-python
 tqdm
 attrdict
 torch
 torchvision
 albumentations
+

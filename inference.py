@@ -311,18 +311,21 @@ def main(cfg):
         cap.set(cv2.CAP_PROP_FRAME_WIDTH,640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT,480)
         cap.set(cv2.CAP_PROP_FPS, 20)
-        
-        # video  = cv2.VideoWriter('video.avi', -1, 25, (640, 480))
-        while i < 100:
-            f,img = cap.read()
-            print("img shape: ", img.shape)
+        inference_time = 0
+        while True:
+            f,ori_img = cap.read()
+            begin = time.time()
+            resized_img = pre_process(ori_img, primary_img_size)
+            car_idx, preds_str = inference_with_ort(resized_img, ori_img, model_ort_session, sub_ort_session1, sub_ort_session2,
+                    nms_thresh, detections_per_img, min_score, secondary_img_size1, secondary_img_size2)
+            inference_time += time.time() - begin
+            if car_idx != 'unknown' and preds_str != '':
+                print("car label: {}\tlpr: {}\t{}".format(car_maker[car_idx], preds_str, path.split('/')[-1]))
+
             cv2.imshow("webcam",img)
             if (cv2.waitKey(5) != -1):
                 break
-            # video.write(img) 
-            i += 1
-        # video.release()    
-
+       print('FPS:', str(int(cur_num/(end-begin))))
 if __name__ == "__main__":
 
     args = make_parser().parse_args()
