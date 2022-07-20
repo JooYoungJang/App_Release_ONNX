@@ -236,13 +236,13 @@ def video_run(video_file_path, primary_img_size, secondary_img_size1, secondary_
                 if type(car_idx) == np.int64:
                     print("car label: {}\tlpr: {}".format(car_maker[car_idx], preds_str))
                     image = putText(image, car_maker[car_idx], (img_w-1500, img_h-100),
-                                    'NanumSquareB.ttf', (0, 255, 0), 100)
+                                    'NanumSquareB.ttf', (0, 255, 0), int(np.sqrt(img_w/1600*img_h/1200)*100))
                 else:
                     print(print("car label: {}\tlpr: {}".format(car_idx, preds_str)))
                     image = putText(image, car_idx, (img_w-1500, img_h-100),
-                                    'NanumSquareB.ttf', (0, 255, 0), 100)
+                                    'NanumSquareB.ttf', (0, 255, 0), int(np.sqrt(img_w/1600*img_h/1200)*100))
                 image = putText(image, preds_str[0], (img_w-800, img_h-200),
-                                    'NanumSquareB.ttf', (0, 0, 255), 100)
+                                    'NanumSquareB.ttf', (0, 0, 255), int(np.sqrt(img_w/1600*img_h/1200)*100))
 
         
     
@@ -308,14 +308,12 @@ def main(cfg):
             print('FPS:', str(int(cur_num/(end-begin))))
     elif cfg.inference_method == 'Stream':
         i = 0
-        img_w, img_h = 640, 480
         cap = cv2.VideoCapture(0)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH,img_w)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT,img_h)
         cap.set(cv2.CAP_PROP_FPS, 20)
         inference_time = 0
         while True:
             f,ori_img = cap.read()
+            img_h, img_w, _ = ori_img.shape
             begin = time.time()
             resized_img = pre_process(ori_img, primary_img_size)
             car_idx, preds_str = inference_with_ort(resized_img, ori_img, model_ort_session, sub_ort_session1, sub_ort_session2,
@@ -323,20 +321,17 @@ def main(cfg):
             inference_time += time.time() - begin
             if preds_str != '':
                 if len(preds_str[0]) < 7 :
-                    video.write(image) 
-                    success, image = videoCapture.read()
-                    cur_num = cur_num + 1
                     continue
                 if type(car_idx) == np.int64:
                     print("car label: {}\tlpr: {}".format(car_maker[car_idx], preds_str))
-                    ori_img = putText(ori_img, car_maker[car_idx], (img_w-1500, img_h-100),
-                                    'NanumSquareB.ttf', (0, 255, 0), 100)
+                    ori_img = putText(ori_img, car_maker[car_idx], (int(img_w*0.1), int(img_h*0.8)),
+                                    'NanumSquareB.ttf', (0, 255, 0), int(np.sqrt(img_w/1600*img_h/1200)*100))
                 else:
                     print(print("car label: {}\tlpr: {}".format(car_idx, preds_str)))
-                    ori_img = putText(ori_img, car_idx, (img_w-1500, img_h-100),
-                                    'NanumSquareB.ttf', (0, 255, 0), 100)
-                ori_img = putText(ori_img, preds_str[0], (img_w-800, img_h-200),
-                                    'NanumSquareB.ttf', (0, 0, 255), 100)
+                    ori_img = putText(ori_img, car_idx, (int(img_w*0.1), int(img_h*0.8)),
+                                    'NanumSquareB.ttf', (0, 255, 0), int(np.sqrt(img_w/1600*img_h/1200)*100))
+                ori_img = putText(ori_img, preds_str[0], (int(img_w*0.5), int(img_h*0.8)),
+                                    'NanumSquareB.ttf', (0, 0, 255), int(np.sqrt(img_w/1600*img_h/1200)*100))
             cv2.imshow("webcam",ori_img)
             if (cv2.waitKey(5) != -1):
                 break
