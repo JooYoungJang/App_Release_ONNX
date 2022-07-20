@@ -1,0 +1,19 @@
+{
+    "data": {
+        "workers_per_gpu": 4,
+        "batch_size_per_gpu": 1,
+        "primary_img_size": 512, 
+        "secondary_img_size1": [80, 240],
+        "secondary_img_size2": 256,
+        "nms_thresh": 0.5,
+        "detections_per_img": 100,
+        "min_score": 0.1,
+        "data_root": "/data/ocr/dyiot_raw/대영_차번검토_동영상",
+        "mode": "detection",
+            "augmentation": {
+                "ImageNormalization": {
+                    "type": "base"
+                }
+            }
+    }    
+}
